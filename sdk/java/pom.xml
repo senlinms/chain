@@ -59,6 +59,16 @@
             <artifactId>gson</artifactId>
             <version>2.6.2</version>
         </dependency>
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcprov-jdk15on</artifactId>
+            <version>1.56</version>
+        </dependency>
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcpkix-jdk15on</artifactId>
+            <version>1.56</version>
+        </dependency>
     </dependencies>
 
     <distributionManagement>
@@ -103,6 +113,14 @@
                         </relocation>
                     </relocations>
                     <filters>
+                        <filter>
+                            <artifact>*:*</artifact>
+                            <excludes>
+                                <exclude>META-INF/*.SF</exclude>
+                                <exclude>META-INF/*.DSA</exclude>
+                                <exclude>META-INF/*.RSA</exclude>
+                            </excludes>
+                        </filter>
                         <filter>
                             <artifact>com.squareup.okhttp:okhttp</artifact>
                             <excludes>

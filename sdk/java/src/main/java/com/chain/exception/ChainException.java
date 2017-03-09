@@ -17,7 +17,7 @@ public class ChainException extends Exception {
    * @param message error message
    */
   public ChainException(String message, Throwable cause) {
-    super (message, cause);
+    super(message, cause);
   }
 
   /**

@@ -1,5 +1,6 @@
 package com.chain.http;
 
+import com.chain.api.Account;
 import com.chain.exception.*;
 import com.chain.common.*;
 
@@ -7,9 +8,12 @@ import java.io.*;
 import java.lang.reflect.Type;
 import java.net.*;
 import java.security.GeneralSecurityException;
+import java.security.KeyPair;
 import java.security.KeyStore;
+import java.security.Security;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -24,6 +28,14 @@ import com.squareup.okhttp.OkHttpClient;
 import com.squareup.okhttp.Request;
 import com.squareup.okhttp.RequestBody;
 import com.squareup.okhttp.Response;
+
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.openssl.PEMKeyPair;
+import org.bouncycastle.openssl.PEMParser;
+import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter;
+import org.bouncycastle.util.io.pem.PemReader;
+
+import sun.misc.BASE64Decoder;
 
 import javax.net.ssl.*;
 
@@ -385,7 +397,7 @@ public class Client {
     try {
       if (builder.trustManagers != null) {
         SSLContext sslContext = SSLContext.getInstance("TLS");
-        sslContext.init(null, builder.trustManagers, null);
+        sslContext.init(builder.keyManagers, builder.trustManagers, null);
         httpClient.setSslSocketFactory(sslContext.getSocketFactory());
       }
     } catch (GeneralSecurityException ex) {
@@ -536,6 +548,7 @@ public class Client {
     private List<URL> urls;
     private String accessToken;
     private CertificatePinner cp;
+    private KeyManager[] keyManagers;
     private TrustManager[] trustManagers;
     private long connectTimeout;
     private TimeUnit connectTimeoutUnit;
@@ -616,17 +629,50 @@ public class Client {
     }
 
     /**
+     * Sets the client's certificate/key pair for mutual TLS authentication.
+     * @param cert pem encoded X.509 certificate
+     * @param key pem encoded X.509 private key
+     */
+    public Builder setX509KeyPair(String cert, String key) throws ChainException, IOException {
+      try (InputStream pemStream = new ByteArrayInputStream(cert.getBytes());
+          PEMParser pp =
+              new PEMParser(new InputStreamReader(new ByteArrayInputStream(key.getBytes())))) {
+        // parse cert
+        CertificateFactory factory = CertificateFactory.getInstance("X.509");
+        X509Certificate certificate = (X509Certificate) factory.generateCertificate(pemStream);
+
+        // parse the private key
+        Security.addProvider(new BouncyCastleProvider());
+        PEMKeyPair pemKeyPair = (PEMKeyPair) pp.readObject();
+        KeyPair kp = new JcaPEMKeyConverter().getKeyPair(pemKeyPair);
+
+        // create a new key store including pair
+        KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+        keyStore.load(null, "password".toCharArray());
+        keyStore.setCertificateEntry("cert", certificate);
+        keyStore.setKeyEntry(
+            "key", kp.getPrivate(), "password".toCharArray(), new X509Certificate[] {certificate});
+        KeyManagerFactory keyManagerFactory =
+            KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+        keyManagerFactory.init(keyStore, "password".toCharArray());
+        this.keyManagers = keyManagerFactory.getKeyManagers();
+        return this;
+      } catch (GeneralSecurityException ex) {
+        throw new ChainException("Unable to store X509 cert/key pair", ex);
+      }
+    }
+
+    /**
      * Trusts the given CA certs, and no others. Use this if you are running
      * your own CA, or are using a self-signed server certificate.
      * @param path The path of a file containing certificates to trust, in PEM format.
      */
     public Builder setTrustedCerts(String path) throws ChainException {
-      try {
+      try (InputStream pemStream = new FileInputStream(path)) {
         // Extract certs from PEM-encoded input.
-        InputStream pemStream = new FileInputStream(path);
         CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
         Collection<? extends Certificate> certificates =
-                certificateFactory.generateCertificates(pemStream);
+            certificateFactory.generateCertificates(pemStream);
         if (certificates.isEmpty()) {
           throw new IllegalArgumentException("expected non-empty set of trusted certificates");
         }
@@ -634,7 +680,8 @@ public class Client {
         // Create empty key store.
         KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
         char[] password =
-                "password".toCharArray(); // The password is unimportant as long as it used consistently.
+            "password"
+                .toCharArray(); // The password is unimportant as long as it used consistently.
         keyStore.load(null, password);
 
         // Load certs into key store.
@@ -646,15 +693,15 @@ public class Client {
 
         // Use key store to build an X509 trust manager.
         KeyManagerFactory keyManagerFactory =
-                KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+            KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
         keyManagerFactory.init(keyStore, password);
         TrustManagerFactory trustManagerFactory =
-                TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
         trustManagerFactory.init(keyStore);
         TrustManager[] trustManagers = trustManagerFactory.getTrustManagers();
         if (trustManagers.length != 1 || !(trustManagers[0] instanceof X509TrustManager)) {
           throw new IllegalStateException(
-                  "Unexpected default trust managers:" + Arrays.toString(trustManagers));
+              "Unexpected default trust managers:" + Arrays.toString(trustManagers));
         }
         this.trustManagers = trustManagers;
         return this;
