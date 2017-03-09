@@ -1,6 +1,5 @@
 package com.chain.http;
 
-import com.chain.api.Account;
 import com.chain.exception.*;
 import com.chain.common.*;
 
@@ -33,9 +32,6 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.openssl.PEMKeyPair;
 import org.bouncycastle.openssl.PEMParser;
 import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter;
-import org.bouncycastle.util.io.pem.PemReader;
-
-import sun.misc.BASE64Decoder;
 
 import javax.net.ssl.*;
 
