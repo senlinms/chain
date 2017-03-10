@@ -34,6 +34,9 @@ module Chain
       @url = URI(@opts[:url])
       @access_token = @opts[:access_token] || @url.userinfo
       @http_mutex = Mutex.new
+      @root_ca_certs = @opts[:root_ca_certs]
+      @cert = @opts[:cert]
+      @key = @opts[:key]
     end
 
     # Returns a copy of the configuration options
@@ -182,6 +185,13 @@ module Chain
       if @url.scheme == 'https'
         @http.use_ssl = true
         @http.verify_mode = OpenSSL::SSL::VERIFY_PEER
+        if @opts.key?(:root_ca_certs)
+          @http.ca_path = @opts[:root_ca_certs]
+        end
+        if @opts.key?(:cert)
+          @http.cert = OpenSSL::X509::Certificate.new(@opts[:cert])
+          @http.key = OpenSSL::PKey::RSA.new(@opts[:key])
+        end
       end
 
       @http
