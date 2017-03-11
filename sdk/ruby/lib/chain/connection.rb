@@ -188,7 +188,7 @@ module Chain
         if @opts.key?(:root_ca_certs)
           @http.ca_file = @opts[:root_ca_certs]
           @http.verify_depth = 5
-       end
+        end
         if @opts.key?(:cert)
           @http.cert = OpenSSL::X509::Certificate.new(@opts[:cert])
           @http.key = OpenSSL::PKey::RSA.new(@opts[:key])
