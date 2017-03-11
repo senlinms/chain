@@ -59,7 +59,7 @@ const (
 
 var (
 	// config vars
-	clientAuth    = env.Bool("CLIENT_AUTH", false)
+	clientAuth    = env.Bool("CLIENT_AUTH", true)
 	tlsCrt        = env.String("TLSCRT", "")
 	tlsKey        = env.String("TLSKEY", "")
 	rootCAs       = env.String("ROOT_CA_CERTS", "") // file path
