@@ -186,8 +186,9 @@ module Chain
         @http.use_ssl = true
         @http.verify_mode = OpenSSL::SSL::VERIFY_PEER
         if @opts.key?(:root_ca_certs)
-          @http.ca_path = @opts[:root_ca_certs]
-        end
+          @http.ca_file = @opts[:root_ca_certs]
+          @http.verify_depth = 5
+       end
         if @opts.key?(:cert)
           @http.cert = OpenSSL::X509::Certificate.new(@opts[:cert])
           @http.key = OpenSSL::PKey::RSA.new(@opts[:key])
