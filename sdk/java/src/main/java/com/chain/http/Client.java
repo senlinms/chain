@@ -14,6 +14,8 @@ import java.security.PrivateKey;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.security.spec.KeySpec;
+import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.RSAPrivateCrtKeySpec;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -44,12 +46,16 @@ import javax.net.ssl.*;
  * to an HSM server.
  */
 public class Client {
-
   private AtomicInteger urlIndex;
   private List<URL> urls;
   private String accessToken;
   private OkHttpClient httpClient;
+
   private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
+  private static final String PKCS1_HEADER = "-----BEGIN RSA PRIVATE KEY-----\n";
+  private static final String PKCS1_FOOTER = "-----END RSA PRIVATE KEY-----\n";
+  private static final String PKCS8_HEADER = "-----BEGIN PRIVATE KEY-----\n";
+  private static final String PKCS8_FOOTER = "-----END PRIVATE KEY-----\n";
   private static String version = "dev"; // updated in the static initializer
 
   private static class BuildProperties {
@@ -632,56 +638,64 @@ public class Client {
      */
     public Builder setX509KeyPair(String cert, String key) throws ChainException, IOException {
       try (InputStream pemStream = new ByteArrayInputStream(cert.getBytes())) {
-        // parse cert
+        // parse certificate
         CertificateFactory factory = CertificateFactory.getInstance("X.509");
         X509Certificate certificate = (X509Certificate) factory.generateCertificate(pemStream);
 
-        // parse the private key
-        // TODO(boymanjor): this assumes a PKCS#1 key. We should decide on the formats we will support
-        // and throw an exception when encountering an unsupported format.
-        key =
-            key.replace("-----BEGIN RSA PRIVATE KEY-----\n", "")
-                .replace("-----END RSA PRIVATE KEY-----\n", "")
-                .replace("\\s", "");
+        // The PKCS standard used by the private key must be determined before parsing.
+        // Currently, Chain Core supports PKCS#1 and PKCS#8.
         BASE64Decoder b64 = new BASE64Decoder();
-        byte[] decoded = b64.decodeBuffer(new ByteArrayInputStream(key.getBytes()));
-        DerInputStream derReader = new DerInputStream(decoded);
-        DerValue[] seq = derReader.getSequence(0);
+        KeySpec spec;
+        byte[] decoded;
+        if (key.contains(PKCS1_HEADER)) {
+          key = key.replace(PKCS1_HEADER, "").replace(PKCS1_FOOTER, "").replaceAll("\\s", "");
+          decoded = b64.decodeBuffer(new ByteArrayInputStream(key.getBytes()));
+          DerInputStream derReader = new DerInputStream(decoded);
+          DerValue[] seq = derReader.getSequence(0);
 
-        if (seq.length < 9) {
-          // The ASN.1 type RSAPrivateKey specifies 9 required fields
-          throw new ChainException("Unable to parse PKCS#1 private key");
+          if (seq.length < 9) {
+            // The ASN.1 type RSAPrivateKey specifies 9 required fields
+            throw new ChainException("Unable to parse PKCS#1 private key");
+          }
+
+          // The first field (seq[0]) is a version identifier
+          BigInteger modulus = seq[1].getBigInteger();
+          BigInteger publicExponent = seq[2].getBigInteger();
+          BigInteger privateExponent = seq[3].getBigInteger();
+          BigInteger primeP = seq[4].getBigInteger();
+          BigInteger primeQ = seq[5].getBigInteger();
+          BigInteger primeExponentP = seq[6].getBigInteger();
+          BigInteger primeExponentQ = seq[7].getBigInteger();
+          BigInteger crtCoefficient = seq[8].getBigInteger();
+
+          spec =
+              new RSAPrivateCrtKeySpec(
+                  modulus,
+                  publicExponent,
+                  privateExponent,
+                  primeP,
+                  primeQ,
+                  primeExponentP,
+                  primeExponentQ,
+                  crtCoefficient);
+        } else if (key.contains(PKCS8_HEADER)) {
+          key = key.replace(PKCS8_HEADER, "").replace(PKCS8_FOOTER, "").replaceAll("\\s", "");
+          decoded = b64.decodeBuffer(new ByteArrayInputStream(key.getBytes()));
+          spec = new PKCS8EncodedKeySpec(decoded);
+        } else {
+          throw new ChainException("Unsupported RSA private key provided.");
         }
 
-        // The first field (seq[0]) is a version identifier
-        BigInteger modulus = seq[1].getBigInteger();
-        BigInteger publicExponent = seq[2].getBigInteger();
-        BigInteger privateExponent = seq[3].getBigInteger();
-        BigInteger primeP = seq[4].getBigInteger();
-        BigInteger primeQ = seq[5].getBigInteger();
-        BigInteger primeExponentP = seq[6].getBigInteger();
-        BigInteger primeExponentQ = seq[7].getBigInteger();
-        BigInteger crtCoefficient = seq[8].getBigInteger();
-
-        RSAPrivateCrtKeySpec spec =
-            new RSAPrivateCrtKeySpec(
-                modulus,
-                publicExponent,
-                privateExponent,
-                primeP,
-                primeQ,
-                primeExponentP,
-                primeExponentQ,
-                crtCoefficient);
-        KeyFactory kf = KeyFactory.getInstance("RSA");
-        PrivateKey priv = kf.generatePrivate(spec);
-
         // create a new key store including pair
+        KeyFactory kf = KeyFactory.getInstance("RSA");
         KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
         keyStore.load(null, "password".toCharArray());
         keyStore.setCertificateEntry("cert", certificate);
         keyStore.setKeyEntry(
-            "key", priv, "password".toCharArray(), new X509Certificate[] {certificate});
+            "key",
+            kf.generatePrivate(spec),
+            "password".toCharArray(),
+            new X509Certificate[] {certificate});
         KeyManagerFactory keyManagerFactory =
             KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
         keyManagerFactory.init(keyStore, "password".toCharArray());
