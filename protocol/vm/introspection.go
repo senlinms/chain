@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-
-	"chain/protocol/bc"
 )
 
 func opCheckOutput(vm *virtualMachine) error {
@@ -51,67 +49,55 @@ func opCheckOutput(vm *virtualMachine) error {
 	if index < 0 {
 		return ErrBadValue
 	}
+	if index > math.MaxUint32 {
+		return ErrBadValue // xxx
+	}
 
 	// The following is per the discussion at
 	// https://chainhq.slack.com/archives/txgraph/p1487964172000960
-	var inpDest bc.ValueDestination
-	switch inp := vm.tx.TxInputs[vm.inputIndex].(type) {
-	case *bc.Spend:
-		inpDest = inp.Destination()
-	case *bc.Issuance:
-		inpDest = inp.Destination()
-	default:
+	if !vm.tx.DestIsMux(vm.inputIndex) {
 		return ErrContext // xxx ?
 	}
-	mux, ok := inpDest.Entry.(*bc.Mux)
-	if !ok {
-		return vm.pushBool(false, true)
-	}
-	muxDests := mux.Destinations()
-	if index >= int64(len(muxDests)) {
-		return ErrBadValue // xxx or simply return false?
+
+	isRetirement, destAssetID, destAmount, destData, destVMVersion, destCode, err := vm.tx.MuxDest(uint32(index))
+	if err != nil {
+		return err // xxx ?
 	}
 
-	someChecks := func(resAssetID bc.AssetID, resAmount uint64, resData bc.Hash) bool {
-		if !bytes.Equal(resAssetID[:], assetID) {
+	someChecks := func(resAssetID []byte, resAmount uint64, resData []byte) bool {
+		if !bytes.Equal(resAssetID, assetID) {
 			return false
 		}
 		if resAmount != uint64(amount) {
 			return false
 		}
-		if len(refdatahash) > 0 && !bytes.Equal(refdatahash, resData[:]) {
+		if len(refdatahash) > 0 && !bytes.Equal(refdatahash, resData) {
 			return false
 		}
 		return true
 	}
 
-	if vmVersion == 1 && len(code) > 0 && code[0] == byte(OP_FAIL) {
-		// Special case alert! Old-style retirements were just outputs
-		// with a control program beginning [FAIL]. New-style retirements
-		// do not have control programs, but for compatibility we allow
-		// CHECKOUTPUT to test for them by specifying a programming
-		// beginnning with [FAIL].
-		r, ok := muxDests[index].Entry.(*bc.Retirement)
-		if !ok {
-			return vm.pushBool(false, true)
-		}
-		ok = someChecks(r.AssetID(), r.Amount(), r.Data())
-		return vm.pushBool(ok, true)
-	}
-
-	o, ok := muxDests[index].Entry.(*bc.Output)
+	ok := someChecks(destAssetID, destAmount, destData)
 	if !ok {
 		return vm.pushBool(false, true)
 	}
 
-	if !someChecks(o.AssetID(), o.Amount(), o.Data()) {
+	if isRetirement {
+		if vmVersion == 1 && len(code) > 0 && code[0] == byte(OP_FAIL) {
+			// Special case alert! Old-style retirements were just outputs
+			// with a control program beginning [FAIL]. New-style retirements
+			// do not have control programs, but for compatibility we allow
+			// CHECKOUTPUT to test for them by specifying a programming
+			// beginnning with [FAIL].
+			return vm.pushBool(true, true)
+		}
 		return vm.pushBool(false, true)
 	}
-	prog := o.ControlProgram()
-	if prog.VMVersion != uint64(vmVersion) {
+
+	if destVMVersion != uint64(vmVersion) {
 		return vm.pushBool(false, true)
 	}
-	if !bytes.Equal(prog.Code, code) {
+	if !bytes.Equal(destCode, code) {
 		return vm.pushBool(false, true)
 	}
 	return vm.pushBool(true, true)
@@ -127,17 +113,12 @@ func opAsset(vm *virtualMachine) error {
 		return err
 	}
 
-	var assetID bc.AssetID
-	switch inp := vm.tx.TxInputs[vm.inputIndex].(type) {
-	case *bc.Issuance:
-		assetID = inp.AssetID()
-	case *bc.Spend:
-		assetID = inp.AssetID()
-	default:
+	assetID, err := vm.tx.AssetID(vm.inputIndex)
+	if err != nil {
 		return ErrContext // xxx right?
 	}
 
-	return vm.push(assetID[:], true)
+	return vm.push(assetID, true)
 }
 
 func opAmount(vm *virtualMachine) error {
@@ -150,14 +131,9 @@ func opAmount(vm *virtualMachine) error {
 		return err
 	}
 
-	var amount uint64
-	switch inp := vm.tx.TxInputs[vm.inputIndex].(type) {
-	case *bc.Issuance:
-		amount = inp.Amount()
-	case *bc.Spend:
-		amount = inp.Amount()
-	default:
-		return ErrContext // xxx ?
+	amount, err := vm.tx.Amount(vm.inputIndex)
+	if err != nil {
+		return err // xxx ?
 	}
 
 	return vm.pushInt64(int64(amount), true)
@@ -217,14 +193,9 @@ func opRefDataHash(vm *virtualMachine) error {
 		return err
 	}
 
-	var data bc.Hash
-	switch inp := vm.tx.TxInputs[vm.inputIndex].(type) {
-	case *bc.Issuance:
-		data = inp.Data()
-	case *bc.Spend:
-		data = inp.Data()
-	default:
-		return ErrContext // xxx ?
+	data, err := vm.tx.InpData(vm.inputIndex)
+	if err != nil {
+		return err // xxx ?
 	}
 
 	return vm.push(data[:], true)
@@ -240,8 +211,7 @@ func opTxRefDataHash(vm *virtualMachine) error {
 		return err
 	}
 
-	h := vm.tx.Data()
-	return vm.push(h[:], true)
+	return vm.push(vm.tx.TxData(), true)
 }
 
 func opIndex(vm *virtualMachine) error {
@@ -267,12 +237,11 @@ func opOutputID(vm *virtualMachine) error {
 		return err
 	}
 
-	sp, ok := vm.tx.TxInputs[vm.inputIndex].(*bc.Spend)
-	if !ok {
-		return ErrContext
+	spentOutputID, err := vm.tx.SpentOutputID(vm.inputIndex)
+	if err != nil {
+		return ErrContext // xxx ?
 	}
-	outid := sp.SpentOutputID()
-	return vm.push(outid[:], true)
+	return vm.push(spentOutputID, true)
 }
 
 func opNonce(vm *virtualMachine) error {
@@ -285,13 +254,12 @@ func opNonce(vm *virtualMachine) error {
 		return err
 	}
 
-	iss, ok := vm.tx.TxInputs[vm.inputIndex].(*bc.Issuance)
-	if !ok {
-		return ErrContext
+	anchorID, err := vm.tx.AnchorID(vm.inputIndex)
+	if err != nil {
+		return err // xxx ?
 	}
 
-	anchorID := iss.AnchorID() // xxx right?
-	return vm.push(anchorID[:], true)
+	return vm.push(anchorID, true)
 }
 
 func opNextProgram(vm *virtualMachine) error {

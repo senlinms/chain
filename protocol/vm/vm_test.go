@@ -1,4 +1,4 @@
-package vm
+package vm_test
 
 import (
 	"bytes"
@@ -10,6 +10,7 @@ import (
 
 	"chain/errors"
 	"chain/protocol/bc"
+	. "chain/protocol/vm"
 	"chain/testutil"
 )
 

@@ -1,10 +1,11 @@
-package vm
+package vm_test
 
 import (
 	"encoding/hex"
 	"testing"
 
 	"chain/protocol/bc"
+	. "chain/protocol/vm"
 	"chain/testutil"
 )
 

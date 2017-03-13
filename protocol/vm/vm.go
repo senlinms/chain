@@ -6,12 +6,34 @@ import (
 	"io"
 	"strings"
 
-	// TODO(bobg): very little of this package depends on bc, consider trying to remove the dependency
 	"chain/errors"
-	"chain/protocol/bc"
 )
 
 const initialRunLimit = 10000
+
+type txContext interface {
+	NumInputs() uint32
+	ProgAndArgs(inpIndex uint32) (vmVersion uint64, code []byte, args [][]byte, err error)
+	Version() uint64
+	DestIsMux(inpIndex uint32) bool
+	MuxDest(inpIndex uint32) (isRetirement bool, assetID []byte, amount uint64, data []byte, vmVersion uint64, controlProg []byte, err error)
+	AssetID(inpIndex uint32) ([]byte, error)
+	Amount(inpIndex uint32) (uint64, error)
+	MinTimeMS() uint64
+	MaxTimeMS() uint64
+	TxData() []byte
+	InpData(inpIndex uint32) ([]byte, error)
+	SpentOutputID(inpIndex uint32) ([]byte, error)
+	AnchorID(inpIndex uint32) ([]byte, error)
+	SigHash(inpIndex uint32) []byte
+}
+
+type blockContext interface {
+	Arguments() [][]byte
+	NextConsensusProgram() []byte
+	TimestampMS() uint64
+	Hash() []byte
+}
 
 type virtualMachine struct {
 	program      []byte // the program currently executing
@@ -33,10 +55,10 @@ type virtualMachine struct {
 	dataStack [][]byte
 	altStack  [][]byte
 
-	tx         *bc.TxEntries
+	tx         txContext
 	inputIndex uint32
 
-	block *bc.BlockEntries
+	block blockContext
 }
 
 // ErrFalseVMResult is one of the ways for a transaction to fail validation
@@ -46,7 +68,7 @@ var ErrFalseVMResult = errors.New("false VM result")
 // execution.
 var TraceOut io.Writer
 
-func VerifyTxInput(tx *bc.TxEntries, inputIndex uint32) (err error) {
+func VerifyTxInput(tx txContext, inputIndex uint32) (err error) {
 	defer func() {
 		if panErr := recover(); panErr != nil {
 			err = ErrUnexpected
@@ -55,27 +77,17 @@ func VerifyTxInput(tx *bc.TxEntries, inputIndex uint32) (err error) {
 	return verifyTxInput(tx, inputIndex)
 }
 
-func verifyTxInput(tx *bc.TxEntries, inputIndex uint32) error {
-	if inputIndex < 0 || inputIndex >= uint32(len(tx.TxInputs)) {
+func verifyTxInput(tx txContext, inputIndex uint32) error {
+	if inputIndex < 0 || inputIndex >= tx.NumInputs() {
 		return ErrBadValue
 	}
 
-	var (
-		prog bc.Program
-		args [][]byte
-	)
-	switch inp := tx.TxInputs[inputIndex].(type) {
-	case *bc.Issuance:
-		prog = inp.IssuanceProgram()
-		args = inp.Arguments()
-	case *bc.Spend:
-		prog = inp.ControlProgram()
-		args = inp.Arguments()
-	default:
-		return errors.WithDetailf(ErrUnsupportedTx, "transaction input %d has unknown type %T", inputIndex, tx.TxInputs[inputIndex])
+	vmVersion, code, args, err := tx.ProgAndArgs(inputIndex)
+	if err != nil {
+		return err
 	}
 
-	if prog.VMVersion != 1 {
+	if vmVersion != 1 {
 		return ErrUnsupportedVM
 	}
 
@@ -85,8 +97,8 @@ func verifyTxInput(tx *bc.TxEntries, inputIndex uint32) error {
 
 		expansionReserved: tx.Version() == 1,
 
-		mainprog: prog.Code,
-		program:  prog.Code,
+		mainprog: code,
+		program:  code,
 		runLimit: initialRunLimit,
 	}
 	for _, arg := range args {
@@ -95,30 +107,30 @@ func verifyTxInput(tx *bc.TxEntries, inputIndex uint32) error {
 			return err
 		}
 	}
-	err := vm.run()
+	err = vm.run()
 	if err == nil && vm.falseResult() {
 		err = ErrFalseVMResult
 	}
 	return wrapErr(err, vm, args)
 }
 
-func VerifyBlockHeader(prev *bc.BlockHeaderEntry, block *bc.BlockEntries) (err error) {
+func VerifyBlockHeader(consensusProg []byte, block blockContext) (err error) {
 	defer func() {
 		if panErr := recover(); panErr != nil {
 			err = ErrUnexpected
 		}
 	}()
-	return verifyBlockHeader(prev, block)
+	return verifyBlockHeader(consensusProg, block)
 }
 
-func verifyBlockHeader(prev *bc.BlockHeaderEntry, block *bc.BlockEntries) error {
+func verifyBlockHeader(consensusProg []byte, block blockContext) error {
 	vm := &virtualMachine{
 		block: block,
 
 		expansionReserved: true,
 
-		mainprog: prev.NextConsensusProgram(),
-		program:  prev.NextConsensusProgram(),
+		mainprog: consensusProg,
+		program:  consensusProg,
 		runLimit: initialRunLimit,
 	}
 

@@ -1,10 +1,11 @@
-package vm
+package vm_test
 
 import (
 	"testing"
 
 	"chain/crypto/sha3pool"
 	"chain/protocol/bc"
+	. "chain/protocol/vm"
 	"chain/testutil"
 )
 
