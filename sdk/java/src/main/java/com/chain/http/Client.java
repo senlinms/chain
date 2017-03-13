@@ -70,7 +70,7 @@ public class Client {
     }
   }
 
-  public Client(Builder builder) throws ChainException {
+  public Client(Builder builder) throws HTTPException {
     List<URL> urls = new ArrayList<URL>(builder.urls);
     if (urls.isEmpty()) {
       try {
@@ -107,7 +107,7 @@ public class Client {
    *
    * @param url the URL of the Chain Core or HSM
    */
-  public Client(URL url) throws ChainException {
+  public Client(URL url) throws HTTPException {
     this(new Builder().setURL(url));
   }
 
@@ -393,7 +393,7 @@ public class Client {
     throw exception;
   }
 
-  private OkHttpClient buildHttpClient(Builder builder) throws ChainException {
+  private OkHttpClient buildHttpClient(Builder builder) throws HTTPException {
     OkHttpClient httpClient = new OkHttpClient();
 
     // Finally, configure the socket factory.
@@ -404,7 +404,7 @@ public class Client {
         httpClient.setSslSocketFactory(sslContext.getSocketFactory());
       }
     } catch (GeneralSecurityException ex) {
-      throw new ChainException("Unable to configure TLS", ex);
+      throw new HTTPException("Unable to configure TLS", ex);
     }
 
     httpClient.setFollowRedirects(false);
@@ -838,7 +838,7 @@ public class Client {
     /**
      * Builds a client with all of the provided parameters.
      */
-    public Client build() throws ChainException {
+    public Client build() throws HTTPException {
       return new Client(this);
     }
   }
