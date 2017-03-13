@@ -636,7 +636,7 @@ public class Client {
      * @param cert pem encoded X.509 certificate
      * @param key pem encoded X.509 private key
      */
-    public Builder setX509KeyPair(String cert, String key) throws ChainException, IOException {
+    public Builder setX509KeyPair(String cert, String key) throws HTTPException {
       try (InputStream pemStream = new ByteArrayInputStream(cert.getBytes())) {
         // parse certificate
         CertificateFactory factory = CertificateFactory.getInstance("X.509");
@@ -655,7 +655,7 @@ public class Client {
 
           if (seq.length < 9) {
             // The ASN.1 type RSAPrivateKey specifies 9 required fields
-            throw new ChainException("Unable to parse PKCS#1 private key");
+            throw new HTTPException("Unable to parse PKCS#1 private key");
           }
 
           // The first field (seq[0]) is a version identifier
@@ -683,7 +683,7 @@ public class Client {
           decoded = b64.decodeBuffer(new ByteArrayInputStream(key.getBytes()));
           spec = new PKCS8EncodedKeySpec(decoded);
         } else {
-          throw new ChainException("Unsupported RSA private key provided.");
+          throw new HTTPException("Unsupported RSA private key provided.");
         }
 
         // create a new key store including pair
@@ -701,8 +701,8 @@ public class Client {
         keyManagerFactory.init(keyStore, "password".toCharArray());
         this.keyManagers = keyManagerFactory.getKeyManagers();
         return this;
-      } catch (GeneralSecurityException ex) {
-        throw new ChainException("Unable to store X509 cert/key pair", ex);
+      } catch (GeneralSecurityException | IOException ex) {
+        throw new HTTPException("Unable to store X509 cert/key pair", ex);
       }
     }
 
@@ -711,7 +711,7 @@ public class Client {
      * your own CA, or are using a self-signed server certificate.
      * @param path The path of a file containing certificates to trust, in PEM format.
      */
-    public Builder setTrustedCerts(String path) throws ChainException {
+    public Builder setTrustedCerts(String path) throws HTTPException {
       try (InputStream pemStream = new FileInputStream(path)) {
         // Extract certs from PEM-encoded input.
         CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
@@ -750,7 +750,7 @@ public class Client {
         this.trustManagers = trustManagers;
         return this;
       } catch (GeneralSecurityException | IOException ex) {
-        throw new ChainException("Unable to configure trusted CA certs", ex);
+        throw new HTTPException("Unable to configure trusted CA certs", ex);
       }
     }
 
