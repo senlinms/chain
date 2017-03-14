@@ -18,7 +18,7 @@ type VMContext interface {
 
 	NumResults() (uint64, error)
 
-	CheckOutput(index uint32, data []byte, amount uint64, assetID []byte, vmVersion uint64, code []byte) (bool, error)
+	CheckOutput(index uint64, data []byte, amount uint64, assetID []byte, vmVersion uint64, code []byte) (bool, error)
 
 	AssetID() ([]byte, error)
 
@@ -39,4 +39,6 @@ type VMContext interface {
 	NextConsensusProgram() ([]byte, error)
 
 	BlockTime() (uint64, error)
+
+	SpentOutputID() ([]byte, error)
 }

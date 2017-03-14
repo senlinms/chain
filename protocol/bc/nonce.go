@@ -1,5 +1,10 @@
 package bc
 
+import (
+	"chain/errors"
+	"chain/protocol/vm"
+)
+
 // Nonce contains data used, among other things, for distinguishing
 // otherwise-identical issuances (when used as those issuances'
 // "anchors"). It satisfies the Entry interface.
@@ -39,7 +44,10 @@ func NewNonce(p Program, tr *TimeRange) *Nonce {
 }
 
 func (n *Nonce) CheckValid(state *validationState) error {
-	// xxx eval program
+	err := vm.Verify(newTxVMContext(state.currentTx, n, n.body.Program, n.witness.Arguments))
+	if err != nil {
+		return errors.Wrap(err, "checking nonce program")
+	}
 
 	// xxx recursively validate the timerange?
 

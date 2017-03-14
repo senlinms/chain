@@ -104,7 +104,7 @@ func (bh *BlockHeaderEntry) CheckValid(state *validationState) error {
 			BlockHeaderEntry: bh,
 			ID:               EntryID(bh),
 		}
-		err := vm.VerifyBlockHeader(state.prevBlockHeader, blockEntries)
+		err := vm.Verify(newBlockVMContext(blockEntries, state.prevBlockHeader.body.NextConsensusProgram, blockEntries.witness.Arguments))
 		if err != nil {
 			return errors.Wrap(err, "evaluating previous block's next consensus program")
 		}

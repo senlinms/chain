@@ -3,6 +3,7 @@ package bc
 import (
 	"chain/errors"
 	"chain/math/checked"
+	"chain/protocol/vm"
 )
 
 // Mux splits and combines value from one or more source entries,
@@ -17,6 +18,7 @@ type Mux struct {
 
 	witness struct {
 		Destinations []ValueDestination // outputs, retirements, and muxes
+		Arguments    [][]byte
 	}
 }
 
@@ -38,7 +40,10 @@ func NewMux(sources []valueSource, program Program) *Mux {
 }
 
 func (mux *Mux) CheckValid(state *validationState) error {
-	// xxx execute mux program
+	err := vm.Verify(newTxVMContext(state.currentTx, mux, mux.body.Program, mux.witness.Arguments))
+	if err != nil {
+		return errors.Wrap(err, "checking mux program")
+	}
 
 	for i, src := range mux.body.Sources {
 		srcState := *state

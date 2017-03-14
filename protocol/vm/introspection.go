@@ -42,10 +42,10 @@ func opCheckOutput(vm *virtualMachine) error {
 	if err != nil {
 		return err
 	}
-	if index < 0 || index >= numResults {
+	if index < 0 || index >= int64(numResults) {
 		return ErrBadValue
 	}
-	ok, err = vm.vmContext.CheckOutput(index, data, amount, assetID, vmVersion, code)
+	ok, err := vm.vmContext.CheckOutput(uint64(index), data, uint64(amount), assetID, uint64(vmVersion), code)
 	if err != nil {
 		return err
 	}
@@ -86,7 +86,7 @@ func opProgram(vm *virtualMachine) error {
 		return err
 	}
 
-	return vm.push(vm.mainprog, true)
+	return vm.push(vm.vmContext.Code(), true)
 }
 
 func opMinTime(vm *virtualMachine) error {

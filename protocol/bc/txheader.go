@@ -83,7 +83,6 @@ func (tx *TxHeader) CheckValid(state *validationState) error {
 		res := tx.Results[i]
 		resState := *state
 		resState.currentEntryID = resID
-		resState.txVersion = tx.body.Version
 		err := res.CheckValid(resState)
 		if err != nil {
 			return errors.Wrapf(err, "checking result %d", i)

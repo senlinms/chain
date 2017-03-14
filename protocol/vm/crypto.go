@@ -147,7 +147,7 @@ func opBlockHash(vm *virtualMachine) error {
 		return errors.Wrap(err, "computing blockhash")
 	}
 
-	err := vm.applyCost(4 * int64(numHashedBytes))
+	err = vm.applyCost(4 * int64(numHashedBytes))
 	if err != nil {
 		return err
 	}

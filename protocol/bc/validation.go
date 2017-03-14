@@ -26,8 +26,9 @@ var (
 
 type validationState struct {
 	blockVersion   uint64
-	txVersion      uint64
 	initialBlockID Hash
+
+	currentTx *TxEntries
 
 	// Set this to the ID of an entry whenever validating an entry
 	currentEntryID Hash

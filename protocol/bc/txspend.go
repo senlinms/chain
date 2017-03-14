@@ -1,6 +1,9 @@
 package bc
 
-import "chain/errors"
+import (
+	"chain/errors"
+	"chain/protocol/vm"
+)
 
 // Spend accesses the value in a prior Output for transfer
 // elsewhere. It satisfies the Entry interface.
@@ -87,7 +90,10 @@ func NewSpend(out *Output, data Hash, ordinal int) *Spend {
 func (s *Spend) CheckValid(state *validationState) error {
 	// xxx SpentOutput "present"
 
-	// xxx run control program
+	err := vm.Verify(newTxVMContext(state.currentTx, s, s.SpentOutput.body.ControlProgram, s.witness.Arguments))
+	if err != nil {
+		return errors.Wrap(err, "checking control program")
+	}
 
 	if s.SpentOutput.body.Source.Value != s.witness.Destination.Value {
 		return vErrf(
@@ -102,7 +108,7 @@ func (s *Spend) CheckValid(state *validationState) error {
 
 	destState := *state
 	destState.destPosition = 0
-	err := s.witness.Destination.CheckValid(&destState)
+	err = s.witness.Destination.CheckValid(&destState)
 	if err != nil {
 		return errors.Wrap(err, "checking spend destination")
 	}

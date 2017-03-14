@@ -14,6 +14,13 @@ type TxEntries struct {
 	TxInputIDs []Hash  // 1:1 correspondence with TxData.Inputs
 }
 
+func (tx *TxEntries) CheckValid(state *validationState) error {
+	newState := *state
+	newState.currentTx = tx
+	newState.currentEntryID = tx.ID
+	return tx.TxHeader.CheckValid(&newState)
+}
+
 func (tx *TxEntries) SigHash(n uint32) (hash Hash) {
 	hasher := sha3pool.Get256()
 	defer sha3pool.Put256(hasher)

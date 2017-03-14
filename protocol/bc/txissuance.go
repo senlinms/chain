@@ -1,9 +1,8 @@
 package bc
 
 import (
-	"fmt"
-
 	"chain/errors"
+	"chain/protocol/vm"
 )
 
 // Issuance is a source of new value on a blockchain. It satisfies the
@@ -117,7 +116,10 @@ func (iss *Issuance) CheckValid(state *validationState) error {
 		return vErrf(errMismatchedAssetID, "asset ID is %x, issuance wants %x", computedAssetID[:], iss.body.Value.AssetID[:])
 	}
 
-	// xxx run issuance program
+	err := vm.Verify(newTxVMContext(state.currentTx, iss, iss.witness.AssetDefinition.IssuanceProgram, iss.witness.Arguments))
+	if err != nil {
+		return errors.Wrap(err, "checking issuance program")
+	}
 
 	var anchored Hash
 	switch a := iss.Anchor.(type) {
@@ -140,7 +142,7 @@ func (iss *Issuance) CheckValid(state *validationState) error {
 
 	anchorState := *state
 	anchorState.currentEntryID = iss.body.Anchor
-	err := iss.Anchor.CheckValid(&anchorState)
+	err = iss.Anchor.CheckValid(&anchorState)
 	if err != nil {
 		return errors.Wrap(err, "checking issuance anchor")
 	}
