@@ -196,7 +196,7 @@ func Start(laddr, dir, bootURL string) (*Service, error) {
 		sv.raftNode = raft.RestartNode(c)
 		triggerElection(ctx, sv)
 	} else if bootURL != "" {
-		log.Write(ctx, "raftid", c.ID)
+		log.Printkv(ctx, "raftid", c.ID)
 		err = writeID(sv.dir, c.ID)
 		if err != nil {
 			return nil, err
@@ -207,7 +207,7 @@ func Start(laddr, dir, bootURL string) (*Service, error) {
 		}
 		sv.raftNode = raft.RestartNode(c)
 	} else {
-		log.Write(ctx, "raftid", c.ID)
+		log.Printkv(ctx, "raftid", c.ID)
 		err = writeID(sv.dir, c.ID)
 		if err != nil {
 			return nil, err
@@ -229,10 +229,10 @@ func Start(laddr, dir, bootURL string) (*Service, error) {
 // think there's no leader. It should only be used when election failures are
 // okay, since it will log errors but won't return them.
 func triggerElection(ctx context.Context, sv *Service) {
-	log.Messagef(ctx, "triggering election")
+	log.Printf(ctx, "triggering election")
 	err := sv.raftNode.Campaign(context.Background())
 	if err != nil {
-		log.Messagef(ctx, "election failed")
+		log.Printf(ctx, "election failed")
 		log.Error(ctx, err)
 	}
 }
@@ -315,7 +315,7 @@ func (sv *Service) runUpdates(wal *wal.WAL) {
 			sv.errMu.Lock()
 			sv.err = err
 			sv.errMu.Unlock()
-			log.Messagef(context.Background(), "raft exiting: %v", err)
+			log.Printf(context.Background(), "raft exiting: %v", err)
 			debug.PrintStack()
 		} else if v != nil {
 			panic(v)
@@ -328,7 +328,7 @@ func (sv *Service) runUpdates(wal *wal.WAL) {
 	}()
 	defer sv.raftNode.Stop()
 	defer close(sv.donec)
-	defer log.Messagef(context.Background(), "ats:got here deferred")
+	defer log.Printf(context.Background(), "ats:got here deferred")
 
 	rdIndices := make(map[string]chan uint64)
 	writers := make(map[string]chan bool)
@@ -430,7 +430,7 @@ func (sv *Service) allocNodeID(ctx context.Context) (uint64, error) {
 	for err == ErrUnsatisfied {
 		sv.stateMu.Lock()
 		nextID, index = sv.state.NextNodeID()
-		log.Messagef(ctx, "raft: attempting to allocate nodeID %d at version %d", nextID, index)
+		log.Printf(ctx, "raft: attempting to allocate nodeID %d at version %d", nextID, index)
 		sv.stateMu.Unlock()
 		b := state.IncrementNextNodeID(nextID, index)
 		err = sv.exec(ctx, b)
@@ -492,7 +492,7 @@ func (sv *Service) get(ctx context.Context, key string) ([]byte, error) {
 			err := sv.Set(ctx, "/dummyWrite", []byte(""))
 			if err != nil {
 				// TODO(tessr): should probably return this error
-				log.Messagef(ctx, "dummy write failed with %s", err)
+				log.Printf(ctx, "dummy write failed with %s", err)
 				return
 			}
 		case <-cancelDummy:
@@ -566,7 +566,7 @@ func (sv *Service) serveJoin(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	log.Write(req.Context(), "at", "join", "addr", x.Addr)
+	log.Printkv(req.Context(), "at", "join", "addr", x.Addr)
 
 	newID, err := sv.allocNodeID(req.Context())
 	if err != nil {
@@ -574,7 +574,7 @@ func (sv *Service) serveJoin(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	log.Write(req.Context(), "at", "join-id", "addr", x.Addr, "id", newID)
+	log.Printkv(req.Context(), "at", "join-id", "addr", x.Addr, "id", newID)
 
 	err = sv.raftNode.ProposeConfChange(req.Context(), raftpb.ConfChange{
 		ID:      atomic.AddUint64(&sv.confChangeID, 1),
@@ -587,7 +587,7 @@ func (sv *Service) serveJoin(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	log.Write(req.Context(), "at", "join-done", "addr", x.Addr, "id", newID)
+	log.Printkv(req.Context(), "at", "join-done", "addr", x.Addr, "id", newID)
 
 	snap := sv.getSnapshot()
 	snapData, err := encodeSnapshot(snap)
@@ -631,7 +631,7 @@ func (sv *Service) join(addr, baseURL string) error {
 	}
 
 	if raft.IsEmptySnap(raftSnap) {
-		log.Write(ctx, "at", "joined", "appliedindex", 0, "msg", "(empty snap)")
+		log.Printkv(ctx, "at", "joined", "appliedindex", 0, "msg", "(empty snap)")
 	} else {
 		err = sv.state.RestoreSnapshot(raftSnap.Data, raftSnap.Metadata.Index)
 		if err != nil {
@@ -639,7 +639,7 @@ func (sv *Service) join(addr, baseURL string) error {
 		}
 		sv.confState = raftSnap.Metadata.ConfState
 		sv.snapIndex = raftSnap.Metadata.Index
-		log.Write(ctx, "at", "joined", "appliedindex", raftSnap.Metadata.Index)
+		log.Printkv(ctx, "at", "joined", "appliedindex", raftSnap.Metadata.Index)
 	}
 
 	return nil
@@ -670,7 +670,7 @@ func decodeSnapshot(data []byte, snapshot *raftpb.Snapshot) error {
 }
 
 func (sv *Service) applyEntry(ent raftpb.Entry, writers map[string]chan bool) {
-	log.Write(context.Background(), "index", ent.Index, "ent", ent)
+	log.Printkv(context.Background(), "index", ent.Index, "ent", ent)
 
 	switch ent.Type {
 	case raftpb.EntryConfChange:
@@ -682,7 +682,7 @@ func (sv *Service) applyEntry(ent raftpb.Entry, writers map[string]chan bool) {
 		sv.confState = *sv.raftNode.ApplyConfChange(cc)
 		switch cc.Type {
 		case raftpb.ConfChangeAddNode, raftpb.ConfChangeUpdateNode:
-			log.Write(context.Background(),
+			log.Printkv(context.Background(),
 				"what", cc.Type,
 				"id", cc.NodeID,
 				"addr", string(cc.Context),
@@ -693,7 +693,7 @@ func (sv *Service) applyEntry(ent raftpb.Entry, writers map[string]chan bool) {
 			sv.state.SetPeerAddr(cc.NodeID, string(cc.Context))
 		case raftpb.ConfChangeRemoveNode:
 			if cc.NodeID == sv.id {
-				log.Write(context.Background(), "nodeID", cc.NodeID, "msg", "removed from cluster")
+				log.Printkv(context.Background(), "nodeID", cc.NodeID, "msg", "removed from cluster")
 				panic(errors.New("removed from cluster"))
 			}
 			sv.stateMu.Lock()
@@ -702,7 +702,7 @@ func (sv *Service) applyEntry(ent raftpb.Entry, writers map[string]chan bool) {
 			sv.state.RemovePeerAddr(cc.NodeID)
 		}
 	case raftpb.EntryNormal:
-		log.Write(context.Background(), "EntryNormal", ent)
+		log.Printkv(context.Background(), "EntryNormal", ent)
 		//raft will send empty request defaulted to EntryNormal on leader election
 		//we need to handle that here
 		if ent.Data == nil {
@@ -714,7 +714,7 @@ func (sv *Service) applyEntry(ent raftpb.Entry, writers map[string]chan bool) {
 		var p proposal
 		err := json.Unmarshal(ent.Data, &p)
 		if err != nil {
-			log.Messagef(context.Background(), "ent.data: %q", ent.Data)
+			log.Printf(context.Background(), "ent.data: %q", ent.Data)
 			panic(err)
 		}
 		satisfied, err := sv.state.Apply(p.Instruction, ent.Index)
@@ -741,7 +741,7 @@ func (sv *Service) send(msgs []raftpb.Message) {
 		addr := sv.state.GetPeerAddr(msg.To)
 		sv.stateMu.Unlock()
 		if addr == "" {
-			log.Write(context.Background(), "no-addr-for-peer", msg.To)
+			log.Printkv(context.Background(), "no-addr-for-peer", msg.To)
 			continue
 		}
 		sendmsg(addr, data)
@@ -752,7 +752,7 @@ func (sv *Service) send(msgs []raftpb.Message) {
 func sendmsg(addr string, data []byte) {
 	resp, err := http.Post("http://"+addr+"/raft/msg", contentType, bytes.NewReader(data))
 	if err != nil {
-		log.Write(context.Background(), log.KeyWarning, err)
+		log.Printkv(context.Background(), log.KeyWarning, err)
 		return
 	}
 	defer resp.Body.Close()
@@ -762,7 +762,7 @@ func sendmsg(addr string, data []byte) {
 // then replays WAL entries into the raft instance.
 // The returned WAL object is nil if no WAL is found.
 func (sv *Service) recover() (*wal.WAL, error) {
-	log.Write(context.Background(), "waldir", sv.walDir())
+	log.Printkv(context.Background(), "waldir", sv.walDir())
 	err := os.MkdirAll(sv.walDir(), 0777)
 	if err != nil {
 		return nil, errors.Wrap(err)

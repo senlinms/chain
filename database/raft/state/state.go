@@ -59,14 +59,14 @@ func (s *State) RestoreSnapshot(data []byte, index uint64) error {
 	err := proto.Unmarshal(data, snapshot)
 	s.peers = snapshot.Peers
 	s.state = snapshot.State //TODO (ameets): need to add version here
-	log.Messagef(context.Background(), "decoded snapshot %#v (err %v)", s, err)
+	log.Printf(context.Background(), "decoded snapshot %#v (err %v)", s, err)
 	return errors.Wrap(err)
 }
 
 // Snapshot returns an encoded copy of s
 // suitable for RestoreSnapshot.
 func (s *State) Snapshot() ([]byte, uint64, error) {
-	log.Messagef(context.Background(), "encoding snapshot %#v", s)
+	log.Printf(context.Background(), "encoding snapshot %#v", s)
 	data, err := proto.Marshal(&statepb.Snapshot{
 		State: s.state,
 		Peers: s.peers,
@@ -92,7 +92,7 @@ func (s *State) Apply(data []byte, index uint64) (satisfied bool, err error) {
 		return false, errors.Wrap(err)
 	}
 
-	log.Messagef(context.Background(), "state instruction: %v", instr)
+	log.Printf(context.Background(), "state instruction: %v", instr)
 	s.appliedIndex = index
 	for _, cond := range instr.Conditions {
 		y := true

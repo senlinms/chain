@@ -49,7 +49,6 @@ import (
 	"chain/net/http/reqid"
 	"chain/protocol"
 	"chain/protocol/bc"
-	_ "chain/protocol/tx" // for TxHash init
 )
 
 const (
@@ -150,7 +149,7 @@ func runServer() {
 	raftDir := filepath.Join(*dataDir, "raft") // TODO(kr): better name for this
 	raftDB, err := raft.Start(*listenAddr, raftDir, *bootURL)
 	if err != nil {
-		chainlog.Fatal(ctx, chainlog.KeyError, err)
+		chainlog.Fatalkv(ctx, chainlog.KeyError, err)
 	}
 
 	// We add handlers to our serve mux in two phases. In the first phase, we start
@@ -190,7 +189,7 @@ func runServer() {
 		if *tlsCrt != "" {
 			cert, err := tls.X509KeyPair([]byte(*tlsCrt), []byte(*tlsKey))
 			if err != nil {
-				chainlog.Fatal(ctx, chainlog.KeyError, errors.Wrap(err, "parsing tls X509 key pair"))
+				chainlog.Fatalkv(ctx, chainlog.KeyError, errors.Wrap(err, "parsing tls X509 key pair"))
 			}
 
 			server.TLSConfig = &tls.Config{
@@ -198,12 +197,12 @@ func runServer() {
 			}
 			err = server.ListenAndServeTLS("", "") // uses TLS certs from above
 			if err != nil {
-				chainlog.Fatal(ctx, chainlog.KeyError, errors.Wrap(err, "ListenAndServeTLS"))
+				chainlog.Fatalkv(ctx, chainlog.KeyError, errors.Wrap(err, "ListenAndServeTLS"))
 			}
 		} else {
 			err = server.ListenAndServe()
 			if err != nil {
-				chainlog.Fatal(ctx, chainlog.KeyError, errors.Wrap(err, "ListenAndServe"))
+				chainlog.Fatalkv(ctx, chainlog.KeyError, errors.Wrap(err, "ListenAndServe"))
 			}
 		}
 	}()
@@ -211,26 +210,26 @@ func runServer() {
 	sql.EnableQueryLogging(*logQueries)
 	db, err := sql.Open("hapg", *dbURL)
 	if err != nil {
-		chainlog.Fatal(ctx, chainlog.KeyError, err)
+		chainlog.Fatalkv(ctx, chainlog.KeyError, err)
 	}
 	db.SetMaxOpenConns(*maxDBConns)
 	db.SetMaxIdleConns(*maxDBConns)
 
 	err = migrate.Run(db)
 	if err != nil {
-		chainlog.Fatal(ctx, chainlog.KeyError, err)
+		chainlog.Fatalkv(ctx, chainlog.KeyError, err)
 	}
 	resetInDevIfRequested(db, raftDB)
 
 	conf, err := config.Load(ctx, db, raftDB)
 	if err != nil {
-		chainlog.Fatal(ctx, chainlog.KeyError, err)
+		chainlog.Fatalkv(ctx, chainlog.KeyError, err)
 	}
 
 	// Initialize internode rpc clients.
 	hostname, err := os.Hostname()
 	if err != nil {
-		chainlog.Fatal(ctx, chainlog.KeyError, err)
+		chainlog.Fatalkv(ctx, chainlog.KeyError, err)
 	}
 	processID := fmt.Sprintf("chain-%s-%d", hostname, os.Getpid())
 	if conf != nil {
@@ -250,7 +249,7 @@ func runServer() {
 		h = launchUnconfiguredCore(ctx, raftDB, db)
 	}
 	mux.Handle("/", h)
-	chainlog.Messagef(ctx, "Chain Core online and listening at %s", *listenAddr)
+	chainlog.Printf(ctx, "Chain Core online and listening at %s", *listenAddr)
 
 	// block forever without using any resources so this process won't quit while
 	// the goroutine containing ListenAndServe is still working
@@ -262,12 +261,12 @@ func launchConfiguredCore(ctx context.Context, raftDB *raft.Service, db *sql.DB,
 	// Initialize the protocol.Chain.
 	heights, err := txdb.ListenBlocks(ctx, *dbURL)
 	if err != nil {
-		chainlog.Fatal(ctx, chainlog.KeyError, err)
+		chainlog.Fatalkv(ctx, chainlog.KeyError, err)
 	}
 	store := txdb.NewStore(db)
 	c, err := protocol.NewChain(ctx, conf.BlockchainId.Hash(), store, heights)
 	if err != nil {
-		chainlog.Fatal(ctx, chainlog.KeyError, err)
+		chainlog.Fatalkv(ctx, chainlog.KeyError, err)
 	}
 
 	var generatorSigners []generator.BlockSigner
@@ -288,7 +287,7 @@ func launchConfiguredCore(ctx context.Context, raftDB *raft.Service, db *sql.DB,
 		} else {
 			hsm, err = devHSM(db)
 			if err != nil {
-				chainlog.Fatal(ctx, chainlog.KeyError, err)
+				chainlog.Fatalkv(ctx, chainlog.KeyError, err)
 			}
 		}
 		s := blocksigner.New(ed25519.PublicKey(conf.BlockPub), hsm, db, c)
@@ -297,7 +296,7 @@ func launchConfiguredCore(ctx context.Context, raftDB *raft.Service, db *sql.DB,
 		signBlockHandler = func(ctx context.Context, b *bc.Block) ([]byte, error) {
 			sig, err := s.ValidateAndSignBlock(ctx, b)
 			if errors.Root(err) == blocksigner.ErrInvalidKey {
-				chainlog.Fatal(ctx, chainlog.KeyError, err)
+				chainlog.Fatalkv(ctx, chainlog.KeyError, err)
 			}
 			return sig, err
 		}
@@ -331,7 +330,7 @@ func launchConfiguredCore(ctx context.Context, raftDB *raft.Service, db *sql.DB,
 	pinStore := pin.NewStore(db)
 	err = pinStore.LoadAll(ctx)
 	if err != nil {
-		chainlog.Fatal(ctx, chainlog.KeyError, err)
+		chainlog.Fatalkv(ctx, chainlog.KeyError, err)
 	}
 	// Start listeners
 	go pinStore.Listen(ctx, account.PinName, *dbURL)
@@ -409,7 +408,7 @@ func launchConfiguredCore(ctx context.Context, raftDB *raft.Service, db *sql.DB,
 		// for recovering after the previous leader's exit.
 		recoveredBlock, recoveredSnapshot, err := c.Recover(ctx)
 		if err != nil {
-			chainlog.Fatal(ctx, chainlog.KeyError, err)
+			chainlog.Fatalkv(ctx, chainlog.KeyError, err)
 		}
 
 		// Create all of the block processor pins.
@@ -419,23 +418,23 @@ func launchConfiguredCore(ctx context.Context, raftDB *raft.Service, db *sql.DB,
 		}
 		err = pinStore.CreatePin(ctx, account.PinName, pinHeight)
 		if err != nil {
-			chainlog.Fatal(ctx, chainlog.KeyError, err)
+			chainlog.Fatalkv(ctx, chainlog.KeyError, err)
 		}
 		err = pinStore.CreatePin(ctx, account.ExpirePinName, pinHeight)
 		if err != nil {
-			chainlog.Fatal(ctx, chainlog.KeyError, err)
+			chainlog.Fatalkv(ctx, chainlog.KeyError, err)
 		}
 		err = pinStore.CreatePin(ctx, account.DeleteSpentsPinName, pinHeight)
 		if err != nil {
-			chainlog.Fatal(ctx, chainlog.KeyError, err)
+			chainlog.Fatalkv(ctx, chainlog.KeyError, err)
 		}
 		err = pinStore.CreatePin(ctx, asset.PinName, pinHeight)
 		if err != nil {
-			chainlog.Fatal(ctx, chainlog.KeyError, err)
+			chainlog.Fatalkv(ctx, chainlog.KeyError, err)
 		}
 		err = pinStore.CreatePin(ctx, query.TxPinName, pinHeight)
 		if err != nil {
-			chainlog.Fatal(ctx, chainlog.KeyError, err)
+			chainlog.Fatalkv(ctx, chainlog.KeyError, err)
 		}
 
 		if conf.IsGenerator {
@@ -459,7 +458,7 @@ func launchConfiguredCore(ctx context.Context, raftDB *raft.Service, db *sql.DB,
 }
 
 func launchUnconfiguredCore(ctx context.Context, raftDB *raft.Service, db pg.DB) http.Handler {
-	chainlog.Messagef(ctx, "Launching as unconfigured Core.")
+	chainlog.Printf(ctx, "Launching as unconfigured Core.")
 	return core.Handler(&core.API{
 		RaftDB:       raftDB,
 		DB:           db,
@@ -493,10 +492,10 @@ func remoteSignerInfo(ctx context.Context, processID, buildTag, blockchainID str
 	for _, signer := range conf.Signers {
 		u, err := url.Parse(signer.Url)
 		if err != nil {
-			chainlog.Fatal(ctx, chainlog.KeyError, err)
+			chainlog.Fatalkv(ctx, chainlog.KeyError, err)
 		}
 		if len(signer.Pubkey) != ed25519.PublicKeySize {
-			chainlog.Fatal(ctx, chainlog.KeyError, errors.Wrap(err), "at", "decoding signer public key")
+			chainlog.Fatalkv(ctx, chainlog.KeyError, errors.Wrap(err), "at", "decoding signer public key")
 		}
 		client := &rpc.Client{
 			BaseURL:      u.String(),
