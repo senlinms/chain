@@ -1,5 +1,7 @@
 package bc
 
+import "chain/errors"
+
 // Spend accesses the value in a prior Output for transfer
 // elsewhere. It satisfies the Entry interface.
 //
@@ -15,11 +17,16 @@ type Spend struct {
 	witness struct {
 		Destination ValueDestination
 		Arguments   [][]byte
+		Anchored    Hash
 	}
 
 	// SpentOutput contains (a pointer to) the manifested entry
 	// corresponding to body.SpentOutput.
 	SpentOutput *Output
+
+	// Anchored contains a pointer to the manifested entry corresponding
+	// to witness.Anchored.
+	Anchored Entry
 }
 
 func (Spend) Type() string         { return "spend1" }
@@ -75,4 +82,34 @@ func NewSpend(out *Output, data Hash, ordinal int) *Spend {
 	s.ordinal = ordinal
 	s.SpentOutput = out
 	return s
+}
+
+func (s *Spend) CheckValid(state *validationState) error {
+	// xxx SpentOutput "present"
+
+	// xxx run control program
+
+	if s.SpentOutput.body.Source.Value != s.witness.Destination.Value {
+		return vErrf(
+			errMismatchedValue,
+			"previous output is for %d unit(s) of %x, spend wants %d unit(s) of %x",
+			s.SpentOutput.body.Source.Value.Amount,
+			s.SpentOutput.body.Source.Value.AssetID[:],
+			s.witness.Destination.Value.Amount,
+			s.witness.Destination.Value.AssetID[:],
+		)
+	}
+
+	destState := *state
+	destState.destPosition = 0
+	err := s.witness.Destination.CheckValid(&destState)
+	if err != nil {
+		return errors.Wrap(err, "checking spend destination")
+	}
+
+	if state.txVersion == 1 && (s.body.ExtHash != Hash{}) {
+		return vErr(errNonemptyExtHash)
+	}
+
+	return nil
 }

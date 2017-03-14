@@ -10,10 +10,18 @@ import (
 	"chain/errors"
 )
 
+type ValidChecker interface {
+	// CheckValid checks the entry for validity w.r.t. the given
+	// validation state.
+	CheckValid(state *validationState) error
+}
+
 // Entry is the interface implemented by each addressable unit in a
 // blockchain: transaction components such as spends, issuances,
 // outputs, and retirements (among others), plus blockheaders.
 type Entry interface {
+	ValidChecker
+
 	// Type produces a short human-readable string uniquely identifying
 	// the type of this entry.
 	Type() string

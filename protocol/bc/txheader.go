@@ -1,5 +1,7 @@
 package bc
 
+import "chain/errors"
+
 // TxHeader contains header information for a transaction. Every
 // transaction on a blockchain contains exactly one TxHeader. The ID
 // of the TxHeader is the ID of the transaction. TxHeader satisfies
@@ -57,4 +59,46 @@ func NewTxHeader(version uint64, results []Entry, data Hash, minTimeMS, maxTimeM
 	}
 
 	return h
+}
+
+func (tx *TxHeader) CheckValid(state *validationState) error {
+	if state.blockVersion == 1 && tx.body.Version != 1 {
+		return vErrf(errTxVersion, "block version %d, transaction version %d", state.blockVersion, tx.body.Version)
+	}
+
+	if tx.body.MaxTimeMS > 0 {
+		if tx.body.MaxTimeMS < tx.body.MinTimeMS {
+			return vErrf(errBadTimeRange, "min time %d, max time %d", tx.body.MinTimeMS, tx.body.MaxTimeMS)
+		}
+		if state.timestampMS > tx.body.MaxTimeMS {
+			return vErrf(errUntimelyTransaction, "block timestamp %d, transaction time range %d-%d", state.timestampMS, tx.body.MinTimeMS, tx.body.MaxTimeMS)
+		}
+	}
+
+	if tx.body.MinTimeMS > 0 && state.timestampMS < tx.body.MinTimeMS {
+		return vErrf(errUntimelyTransaction, "block timestamp %d, transaction time range %d-%d", state.timestampMS, tx.body.MinTimeMS, tx.body.MaxTimeMS)
+	}
+
+	for i, resID := range tx.body.Results {
+		res := tx.Results[i]
+		resState := *state
+		resState.currentEntryID = resID
+		resState.txVersion = tx.body.Version
+		err := res.CheckValid(resState)
+		if err != nil {
+			return errors.Wrapf(err, "checking result %d", i)
+		}
+	}
+
+	if tx.body.Version == 1 {
+		if len(tx.body.Results) == 0 {
+			return vErr(errEmptyResults)
+		}
+
+		if (tx.body.ExtHash != Hash{}) {
+			return vErr(errNonemptyExtHash)
+		}
+	}
+
+	return nil
 }
