@@ -32,28 +32,28 @@ func (vs *valueSource) CheckValid(state *validationState) error {
 	switch ref := vs.Entry.(type) {
 	case *Issuance:
 		if vs.Position != 0 {
-			return vErrf(errPosition, "invalid position %d for issuance source", vs.Position)
+			return errors.WithDetailf(errPosition, "invalid position %d for issuance source", vs.Position)
 		}
 		dest = ref.witness.Destination
 
 	case *Spend:
 		if vs.Position != 0 {
-			return vErrf(errPosition, "invalid position %d for spend source", vs.Position)
+			return errors.WithDetailf(errPosition, "invalid position %d for spend source", vs.Position)
 		}
 		dest = ref.witness.Destination
 
 	case *Mux:
-		if vs.Position >= len(ref.witness.Destinations) {
-			return VErrf(errPosition, "invalid position %d for %d-destination mux source", vs.Position, len(ref.witness.Destinations))
+		if vs.Position >= uint64(len(ref.witness.Destinations)) {
+			return errors.WithDetailf(errPosition, "invalid position %d for %d-destination mux source", vs.Position, len(ref.witness.Destinations))
 		}
 		dest = ref.witness.Destinations[vs.Position]
 
 	default:
-		return vErrf(errEntryType, "value source is %T, should be issuance, spend, or mux", vs.Entry)
+		return errors.WithDetailf(errEntryType, "value source is %T, should be issuance, spend, or mux", vs.Entry)
 	}
 
 	if dest.Ref != state.currentEntryID {
-		return vErrf(errMismatchedReference, "value source for %x has disagreeing destination %x", state.currentEntryID[:], dest.Ref[:])
+		return errors.WithDetailf(errMismatchedReference, "value source for %x has disagreeing destination %x", state.currentEntryID[:], dest.Ref[:])
 	}
 
 	if dest.Position != state.sourcePosition {
@@ -95,7 +95,7 @@ func (vd *ValueDestination) CheckValid(state *validationState) error {
 		src = ref.body.Source
 
 	case *Mux:
-		if vd.Position >= len(ref.body.Sources) {
+		if vd.Position >= uint64(len(ref.body.Sources)) {
 			return fmt.Errorf("invalid position %d for %d-source mux destination", vd.Position, len(ref.body.Sources))
 		}
 		src = ref.body.Sources[vd.Position]
@@ -105,7 +105,7 @@ func (vd *ValueDestination) CheckValid(state *validationState) error {
 	}
 
 	if src.Ref != state.currentEntryID {
-		return fmt.Errorf("value destination for %x has disagreeing source %x", state.currentEntryID[:].src.Ref[:])
+		return fmt.Errorf("value destination for %x has disagreeing source %x", state.currentEntryID[:], src.Ref[:])
 	}
 
 	if src.Position != state.destPosition {

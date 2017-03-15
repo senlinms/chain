@@ -52,11 +52,11 @@ func (n *Nonce) CheckValid(state *validationState) error {
 	// xxx recursively validate the timerange?
 
 	if n.TimeRange.body.MinTimeMS == 0 || n.TimeRange.body.MaxTimeMS == 0 {
-		return vErr(errZeroTime)
+		return errZeroTime
 	}
 
-	if state.txVersion == 1 && (n.body.ExtHash != Hash{}) {
-		return vErr(errNonemptyExtHash)
+	if state.currentTx.body.Version == 1 && (n.body.ExtHash != Hash{}) {
+		return errNonemptyExtHash
 	}
 
 	return nil

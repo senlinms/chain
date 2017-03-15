@@ -1,5 +1,7 @@
 package bc
 
+import "chain/errors"
+
 // Retirement is for the permanent removal of some value from a
 // blockchain. The value it contains can never be obtained by later
 // entries. Retirement satisfies the Entry interface.
@@ -50,8 +52,8 @@ func (r *Retirement) CheckValid(state *validationState) error {
 		return errors.Wrap(err, "checking retirement source")
 	}
 
-	if state.txVersion == 1 && (r.body.ExtHash != Hash{}) {
-		return vErr(errNonemptyExtHash)
+	if state.currentTx.body.Version == 1 && (r.body.ExtHash != Hash{}) {
+		return errNonemptyExtHash
 	}
 
 	return nil

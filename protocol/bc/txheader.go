@@ -63,27 +63,27 @@ func NewTxHeader(version uint64, results []Entry, data Hash, minTimeMS, maxTimeM
 
 func (tx *TxHeader) CheckValid(state *validationState) error {
 	if state.blockVersion == 1 && tx.body.Version != 1 {
-		return vErrf(errTxVersion, "block version %d, transaction version %d", state.blockVersion, tx.body.Version)
+		return errors.WithDetailf(errTxVersion, "block version %d, transaction version %d", state.blockVersion, tx.body.Version)
 	}
 
 	if tx.body.MaxTimeMS > 0 {
 		if tx.body.MaxTimeMS < tx.body.MinTimeMS {
-			return vErrf(errBadTimeRange, "min time %d, max time %d", tx.body.MinTimeMS, tx.body.MaxTimeMS)
+			return errors.WithDetailf(errBadTimeRange, "min time %d, max time %d", tx.body.MinTimeMS, tx.body.MaxTimeMS)
 		}
 		if state.timestampMS > tx.body.MaxTimeMS {
-			return vErrf(errUntimelyTransaction, "block timestamp %d, transaction time range %d-%d", state.timestampMS, tx.body.MinTimeMS, tx.body.MaxTimeMS)
+			return errors.WithDetailf(errUntimelyTransaction, "block timestamp %d, transaction time range %d-%d", state.timestampMS, tx.body.MinTimeMS, tx.body.MaxTimeMS)
 		}
 	}
 
 	if tx.body.MinTimeMS > 0 && state.timestampMS < tx.body.MinTimeMS {
-		return vErrf(errUntimelyTransaction, "block timestamp %d, transaction time range %d-%d", state.timestampMS, tx.body.MinTimeMS, tx.body.MaxTimeMS)
+		return errors.WithDetailf(errUntimelyTransaction, "block timestamp %d, transaction time range %d-%d", state.timestampMS, tx.body.MinTimeMS, tx.body.MaxTimeMS)
 	}
 
 	for i, resID := range tx.body.Results {
 		res := tx.Results[i]
 		resState := *state
 		resState.currentEntryID = resID
-		err := res.CheckValid(resState)
+		err := res.CheckValid(&resState)
 		if err != nil {
 			return errors.Wrapf(err, "checking result %d", i)
 		}
@@ -91,11 +91,11 @@ func (tx *TxHeader) CheckValid(state *validationState) error {
 
 	if tx.body.Version == 1 {
 		if len(tx.body.Results) == 0 {
-			return vErr(errEmptyResults)
+			return errEmptyResults
 		}
 
 		if (tx.body.ExtHash != Hash{}) {
-			return vErr(errNonemptyExtHash)
+			return errNonemptyExtHash
 		}
 	}
 

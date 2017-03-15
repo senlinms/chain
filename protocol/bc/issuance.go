@@ -19,7 +19,15 @@ type IssuanceInput struct {
 func (ii *IssuanceInput) IsIssuance() bool { return true }
 
 func (ii *IssuanceInput) AssetID() AssetID {
-	return ComputeAssetID(ii.IssuanceProgram, ii.InitialBlock, ii.VMVersion, ii.AssetDefinitionHash())
+	def := &AssetDefinition{
+		InitialBlockID: ii.InitialBlock,
+		IssuanceProgram: Program{
+			VMVersion: ii.VMVersion,
+			Code:      ii.IssuanceProgram,
+		},
+		Data: ii.AssetDefinitionHash(),
+	}
+	return def.ComputeAssetID()
 }
 
 func (ii *IssuanceInput) AssetDefinitionHash() (defhash Hash) {

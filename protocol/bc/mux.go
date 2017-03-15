@@ -47,7 +47,7 @@ func (mux *Mux) CheckValid(state *validationState) error {
 
 	for i, src := range mux.body.Sources {
 		srcState := *state
-		srcState.sourcePosition = i
+		srcState.sourcePosition = uint64(i)
 		err := src.CheckValid(&srcState)
 		if err != nil {
 			return errors.Wrapf(err, "checking mux source %d", i)
@@ -56,18 +56,18 @@ func (mux *Mux) CheckValid(state *validationState) error {
 
 	for i, dest := range mux.witness.Destinations {
 		destState := *state
-		destState.destPosition = i
+		destState.destPosition = uint64(i)
 		err := dest.CheckValid(&destState)
 		if err != nil {
 			return errors.Wrapf(err, "checking mux destination %d", i)
 		}
 	}
 
-	parity := make(map[AssetID]uint64)
+	parity := make(map[AssetID]int64)
 	for i, src := range mux.body.Sources {
 		sum, ok := checked.AddInt64(parity[src.Value.AssetID], int64(src.Value.Amount))
 		if !ok {
-			return vErrf(errOverflow, "adding %d units of asset %x from mux source %d to total %d overflows int64", src.Value.Amount, src.Value.AssetID[:], i, parity[src.Value.AssetID])
+			return errors.WithDetailf(errOverflow, "adding %d units of asset %x from mux source %d to total %d overflows int64", src.Value.Amount, src.Value.AssetID[:], i, parity[src.Value.AssetID])
 		}
 		parity[src.Value.AssetID] = sum
 	}
@@ -75,24 +75,24 @@ func (mux *Mux) CheckValid(state *validationState) error {
 	for i, dest := range mux.witness.Destinations {
 		sum, ok := parity[dest.Value.AssetID]
 		if !ok {
-			return vErrf(errNoSource, "mux destination %d, asset %x, has no corresponding source", i, dest.Value.AssetID[:])
+			return errors.WithDetailf(errNoSource, "mux destination %d, asset %x, has no corresponding source", i, dest.Value.AssetID[:])
 		}
 
 		diff, ok := checked.SubInt64(sum, int64(dest.Value.Amount))
 		if !ok {
-			return vErrf(errOverflow, "subtracting %d units of asset %x from mux destination %d from total %d underflows int64", dest.Value.Amount, dest.Value.AssetID[:], i, sum)
+			return errors.WithDetailf(errOverflow, "subtracting %d units of asset %x from mux destination %d from total %d underflows int64", dest.Value.Amount, dest.Value.AssetID[:], i, sum)
 		}
 		parity[dest.Value.AssetID] = diff
 	}
 
 	for assetID, amount := range parity {
 		if amount != 0 {
-			return vErrf(errUnbalanced, "asset %x sources - destinations = %d (should be 0)", assetID[:], amount)
+			return errors.WithDetailf(errUnbalanced, "asset %x sources - destinations = %d (should be 0)", assetID[:], amount)
 		}
 	}
 
-	if state.txVersion == 1 && (mux.body.ExtHash != Hash{}) {
-		return vErr(errNonemptyExtHash)
+	if state.currentTx.body.Version == 1 && (mux.body.ExtHash != Hash{}) {
+		return errNonemptyExtHash
 	}
 
 	return nil

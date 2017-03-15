@@ -96,7 +96,7 @@ func (s *Spend) CheckValid(state *validationState) error {
 	}
 
 	if s.SpentOutput.body.Source.Value != s.witness.Destination.Value {
-		return vErrf(
+		return errors.WithDetailf(
 			errMismatchedValue,
 			"previous output is for %d unit(s) of %x, spend wants %d unit(s) of %x",
 			s.SpentOutput.body.Source.Value.Amount,
@@ -113,8 +113,8 @@ func (s *Spend) CheckValid(state *validationState) error {
 		return errors.Wrap(err, "checking spend destination")
 	}
 
-	if state.txVersion == 1 && (s.body.ExtHash != Hash{}) {
-		return vErr(errNonemptyExtHash)
+	if state.currentTx.body.Version == 1 && (s.body.ExtHash != Hash{}) {
+		return errNonemptyExtHash
 	}
 
 	return nil

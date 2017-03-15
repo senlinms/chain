@@ -169,7 +169,7 @@ func (t *TxInput) readFrom(r io.Reader) (err error) {
 				return err
 			}
 
-			computedAssetID := ComputeAssetID(ii.IssuanceProgram, ii.InitialBlock, ii.VMVersion, ii.AssetDefinitionHash())
+			computedAssetID := ii.AssetID()
 			if computedAssetID != assetID {
 				return errBadAssetID
 			}

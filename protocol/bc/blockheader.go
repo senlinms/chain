@@ -113,6 +113,7 @@ func (bh *BlockHeaderEntry) CheckValid(state *validationState) error {
 	for i, tx := range state.blockTxs {
 		txState := *state
 		txState.currentEntryID = tx.ID
+		txState.currentTx = tx
 		err := tx.CheckValid(&txState)
 		if err != nil {
 			return errors.Wrapf(err, "checking validity of transaction %d of %d", i, len(state.blockTxs))
@@ -128,7 +129,7 @@ func (bh *BlockHeaderEntry) CheckValid(state *validationState) error {
 		return errors.WithDetailf(errMismatchedMerkleRoot, "computed %x, current block wants %x", txRoot[:], bh.body.TransactionsRoot[:])
 	}
 
-	if bh.body.Version == 1 && (bh.body.ExtHash != bh.Hash{}) {
+	if bh.body.Version == 1 && (bh.body.ExtHash != Hash{}) {
 		return errNonemptyExtHash
 	}
 

@@ -1,5 +1,7 @@
 package bc
 
+import "chain/errors"
+
 // Output is the result of a transfer of value. The value it contains
 // may be accessed by a later Spend entry (if that entry can satisfy
 // the Output's ControlProgram). Output satisfies the Entry interface.
@@ -62,8 +64,8 @@ func (o *Output) CheckValid(state *validationState) error {
 		return errors.Wrap(err, "checking output source")
 	}
 
-	if state.txVersion == 1 && (o.body.ExtHash != Hash{}) {
-		return vErr(errNonemptyExtHash)
+	if state.currentTx.body.Version == 1 && (o.body.ExtHash != Hash{}) {
+		return errNonemptyExtHash
 	}
 
 	return nil

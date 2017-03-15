@@ -60,11 +60,11 @@ func (iss *Issuance) Destination() ValueDestination {
 }
 
 func (iss *Issuance) InitialBlockID() Hash {
-	return iss.witness.InitialBlockID
+	return iss.witness.AssetDefinition.InitialBlockID
 }
 
 func (iss *Issuance) IssuanceProgram() Program {
-	return iss.witness.IssuanceProgram
+	return iss.witness.AssetDefinition.IssuanceProgram
 }
 
 func (iss *Issuance) Arguments() [][]byte {
@@ -80,15 +80,15 @@ func (iss *Issuance) SetDestination(id Hash, pos uint64, e Entry) {
 }
 
 func (iss *Issuance) SetInitialBlockID(hash Hash) {
-	iss.witness.InitialBlockID = hash
+	iss.witness.AssetDefinition.InitialBlockID = hash
 }
 
 func (iss *Issuance) SetAssetDefinitionHash(hash Hash) {
-	iss.witness.AssetDefinitionHash = hash
+	iss.witness.AssetDefinition.Data = hash
 }
 
 func (iss *Issuance) SetIssuanceProgram(prog Program) {
-	iss.witness.IssuanceProgram = prog
+	iss.witness.AssetDefinition.IssuanceProgram = prog
 }
 
 func (iss *Issuance) SetArguments(args [][]byte) {
@@ -108,12 +108,12 @@ func NewIssuance(anchor Entry, value AssetAmount, data Hash, ordinal int) *Issua
 
 func (iss *Issuance) CheckValid(state *validationState) error {
 	if iss.witness.AssetDefinition.InitialBlockID != state.initialBlockID {
-		return vErrf(errWrongBlockchain, "current blockchain %x, asset defined on blockchain %x", state.initialBlockID[:], iss.witness.AssetDefinition.InitialBlockID[:])
+		return errors.WithDetailf(errWrongBlockchain, "current blockchain %x, asset defined on blockchain %x", state.initialBlockID[:], iss.witness.AssetDefinition.InitialBlockID[:])
 	}
 
 	computedAssetID := iss.witness.AssetDefinition.ComputeAssetID()
 	if computedAssetID != iss.body.Value.AssetID {
-		return vErrf(errMismatchedAssetID, "asset ID is %x, issuance wants %x", computedAssetID[:], iss.body.Value.AssetID[:])
+		return errors.WithDetailf(errMismatchedAssetID, "asset ID is %x, issuance wants %x", computedAssetID[:], iss.body.Value.AssetID[:])
 	}
 
 	err := vm.Verify(newTxVMContext(state.currentTx, iss, iss.witness.AssetDefinition.IssuanceProgram, iss.witness.Arguments))
@@ -133,11 +133,11 @@ func (iss *Issuance) CheckValid(state *validationState) error {
 		anchored = a.witness.Anchored
 
 	default:
-		return vErrf(errEntryType, "issuance anchor has type %T, should be nonce, spend, or issuance", iss.Anchor)
+		return errors.WithDetailf(errEntryType, "issuance anchor has type %T, should be nonce, spend, or issuance", iss.Anchor)
 	}
 
 	if anchored != state.currentEntryID {
-		return vErrf(errMismatchedReference, "issuance %x anchor is for %x", state.currentEntryID[:], anchored[:])
+		return errors.WithDetailf(errMismatchedReference, "issuance %x anchor is for %x", state.currentEntryID[:], anchored[:])
 	}
 
 	anchorState := *state
@@ -155,7 +155,7 @@ func (iss *Issuance) CheckValid(state *validationState) error {
 	}
 
 	if state.txVersion == 1 && (iss.body.ExtHash != Hash{}) {
-		return vErr(errNonemptyExtHash)
+		return errNonemptyExtHash
 	}
 
 	return nil
