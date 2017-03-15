@@ -46,3 +46,17 @@ type validationState struct {
 	blockTxs          []*TxEntries
 	// xxx reachable entries?
 }
+
+type blockVMContext struct {
+}
+
+func newBlockVMContext(blockEntries *BlockEntries, prog []byte, args [][]byte) *blockVMContext {
+	return &blockVMContext{}
+}
+
+type txVMContext struct {
+}
+
+func newTxVMContext(txEntries *TxEntries, entry Entry, prog Program, args [][]byte) *txVMContext {
+	return &txVMContext{}
+}

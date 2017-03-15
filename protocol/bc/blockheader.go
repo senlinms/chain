@@ -81,23 +81,23 @@ func NewBlockHeaderEntry(version, height uint64, previousBlockID Hash, timestamp
 func (bh *BlockHeaderEntry) CheckValid(state *validationState) error {
 	if state.prevBlockHeader == nil {
 		if bh.body.Height != 1 {
-			return vErrf(errNoPrevBlock, "height %d", bh.body.Height)
+			return errors.WithDetailf(errNoPrevBlock, "height %d", bh.body.Height)
 		}
 	} else {
 		if bh.body.Version < state.prevBlockHeader.body.Version {
-			return vErrf(errVersionRegression, "previous block verson %d, current block version %d", state.prevBlockHeader.body.Version, bh.body.Version)
+			return errors.WithDetailf(errVersionRegression, "previous block verson %d, current block version %d", state.prevBlockHeader.body.Version, bh.body.Version)
 		}
 
 		if bh.body.Height != state.prevBlockHeader.body.Height+1 {
-			return vErrf(errMisorderedBlockHeight, "previous block height %d, current block height %d", state.prevBlockHeader.body.Height, bh.body.Height)
+			return errors.WithDetailf(errMisorderedBlockHeight, "previous block height %d, current block height %d", state.prevBlockHeader.body.Height, bh.body.Height)
 		}
 
 		if state.prevBlockHeaderID != bh.body.PreviousBlockID {
-			return vErrf(errMismatchedBlock, "previous block ID %x, current block wants %x", state.prevBlockHeaderID[:], bh.body.PreviousBlockID[:])
+			return errors.WithDetailf(errMismatchedBlock, "previous block ID %x, current block wants %x", state.prevBlockHeaderID[:], bh.body.PreviousBlockID[:])
 		}
 
 		if bh.body.TimestampMS <= state.prevBlockHeader.body.TimestampMS {
-			return vErrf(errMisorderedBlockTime, "previous block time %d, current block time %d", state.prevBlockHeader.body.TimestampMS, bh.body.TimestampMS)
+			return errors.WithDetailf(errMisorderedBlockTime, "previous block time %d, current block time %d", state.prevBlockHeader.body.TimestampMS, bh.body.TimestampMS)
 		}
 
 		blockEntries := &BlockEntries{
@@ -115,7 +115,7 @@ func (bh *BlockHeaderEntry) CheckValid(state *validationState) error {
 		txState.currentEntryID = tx.ID
 		err := tx.CheckValid(&txState)
 		if err != nil {
-			return errors.Wrapf(err, "checking validity of transaction %d of %d", i, len(txs))
+			return errors.Wrapf(err, "checking validity of transaction %d of %d", i, len(state.blockTxs))
 		}
 	}
 
@@ -125,11 +125,11 @@ func (bh *BlockHeaderEntry) CheckValid(state *validationState) error {
 	}
 
 	if txRoot != bh.body.TransactionsRoot {
-		return vErrf(errMismatchedMerkleRoot, "computed %x, current block wants %x", txRoot[:], bh.body.TransactionsRoot[:])
+		return errors.WithDetailf(errMismatchedMerkleRoot, "computed %x, current block wants %x", txRoot[:], bh.body.TransactionsRoot[:])
 	}
 
 	if bh.body.Version == 1 && (bh.body.ExtHash != bh.Hash{}) {
-		return vErr(errNonemptyExtHash)
+		return errNonemptyExtHash
 	}
 
 	return nil
