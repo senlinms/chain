@@ -63,6 +63,6 @@ func BenchmarkCalcMerkleRoot(b *testing.B) {
 	b.StartTimer()
 
 	for i := 0; i < b.N; i++ {
-		validation.CalcMerkleRoot(txs)
+		bc.CalcMerkleRoot(txs)
 	}
 }
